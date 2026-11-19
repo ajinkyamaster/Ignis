@@ -1,0 +1,13 @@
+from app.llm.contracts import AnalyzerOutput, ReviewerBatchOutput
+from app.llm.router import structured
+
+SYSTEM = '''You are the Ignis Reviewer. Judge every candidate separately against the user's core workflow, based only on supplied evidence. Strong means substantially the same input→processing→output workflow. Related means meaningful overlap in the user's specific problem, input material, or core workflow, despite a different complete workflow. A broad domain such as education or one shared generic feature is insufficient. An end-user product for a different problem is No match even when it uses one of the user's features; a standalone component library may be Related when directly reusable for a named workflow step. Articles, essays, idea pitches, and general discussions are No match unless the supplied evidence describes an actual working project with the relevant capability. No match means neither. Return exactly one judgment for each supplied candidate_id, never invent IDs. Covered feature IDs must refer only to clearly supported user features, not implied ones. Searchable study materials plus a transcript do not establish searchable transcripts; flashcards do not establish key-concept extraction. If a supplied feature combines distinct named capabilities, mark it covered only when the evidence supports every part; export to Anki does not prove LMS integration. Addons are clearly evidenced functions beyond user features. Treat challenges, roadmaps, future plans, and What's next sections as NOT implemented; never count those claims toward Strong, covered features, or addons. A proposed flashcard feature is not a current flashcard feature. State missing coverage as not established by supplied evidence; do not say a project lacks or does not handle an undocumented feature. Confidence is Low for thin/stub READMEs or fallback excerpts, Medium for partial documentation, High only for detailed workflow evidence. Do not equate shared keywords with workflow equivalence.'''
+
+async def review(profile: AnalyzerOutput, candidates: list[dict]) -> ReviewerBatchOutput:
+    expected = [candidate['candidate_id'] for candidate in candidates]
+    def validate(result: ReviewerBatchOutput) -> None:
+        actual = [judgment.candidate_id for judgment in result.judgments]
+        if len(actual) != len(expected) or set(actual) != set(expected):
+            raise ValueError('Reviewer must judge every candidate exactly once')
+    return await structured('reviewer', SYSTEM, {'profile': profile.model_dump(), 'candidates': candidates},
+                            ReviewerBatchOutput, validate)
